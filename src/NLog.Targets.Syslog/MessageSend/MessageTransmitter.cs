@@ -7,6 +7,7 @@ using System.Linq;
 using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
+using NLog.Targets.Syslog.CustomExceptions;
 using NLog.Targets.Syslog.Extensions;
 using NLog.Targets.Syslog.Settings;
 
@@ -61,11 +62,11 @@ namespace NLog.Targets.Syslog.MessageSend
 
             var delay = neverConnected ? ZeroSecondsTimeSpan : recoveryTime;
             neverConnected = false;
-            return Task.Delay(delay, token)
+            throw new LostConnectionException(Task.Delay(delay, token)
                 .Then(_ => ReInit(), token)
                 .Unwrap()
                 .Then(_ => SendAsync(message, token), token)
-                .Unwrap();
+                .Unwrap());
         }
 
         public void Dispose()

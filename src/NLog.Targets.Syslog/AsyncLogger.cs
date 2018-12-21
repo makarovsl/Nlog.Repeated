@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using NLog.Common;
 using NLog.Layouts;
+using NLog.Targets.Syslog.CustomExceptions;
 using NLog.Targets.Syslog.Extensions;
 using NLog.Targets.Syslog.MessageCreation;
 using NLog.Targets.Syslog.MessageSend;
@@ -75,15 +76,16 @@ namespace NLog.Targets.Syslog
             if (token.IsCancellationRequested)
                 return tcs.CanceledTask();
 
+            AsyncLogEventInfo asyncLogEventInfo;
             try
             {
-                var asyncLogEventInfo = queue.Take(token);
+                asyncLogEventInfo = queue.Take(token);
                 SignalFlushCompletionWhenIsMarker(asyncLogEventInfo);
                 var logEventMsgSet = new LogEventMsgSet(asyncLogEventInfo, buffer, messageBuilder, messageTransmitter);
 
                 logEventMsgSet
                     .Build(layout)
-                    .SendAsync(token)
+                    .SendAsync(token, asyncLogEventInfo, this)
                     .ContinueWith(t =>
                     {
                         if (t.IsCanceled)
@@ -100,6 +102,14 @@ namespace NLog.Targets.Syslog
                     }, token, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Current);
 
                 return tcs.Task;
+            }
+            catch (LostConnectionException ex)
+            {                
+                var newLogEvent = new AsyncLogEventInfo(new LogEventInfo(asyncLogEventInfo.LogEvent.Level, asyncLogEventInfo.LogEvent.LoggerName + " 1", asyncLogEventInfo.LogEvent.Message), asyncLogEventInfo.Continuation);
+                Log(newLogEvent);
+                return tcs.FailedTask(ex);
+
+                //return ProcessQueueAsync(messageBuilder, tcs);
             }
             catch (Exception exception)
             {

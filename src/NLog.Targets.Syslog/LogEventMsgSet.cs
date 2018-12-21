@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using NLog.Common;
 using NLog.Layouts;
+using NLog.Targets.Syslog.CustomExceptions;
 using NLog.Targets.Syslog.Extensions;
 using NLog.Targets.Syslog.MessageCreation;
 using NLog.Targets.Syslog.MessageSend;
@@ -36,12 +37,12 @@ namespace NLog.Targets.Syslog
             return this;
         }
 
-        public Task SendAsync(CancellationToken token)
+        public Task SendAsync(CancellationToken token, AsyncLogEventInfo message, AsyncLogger asyncLogger)
         {
-            return SendAsync(token, new TaskCompletionSource<object>());
+            return SendAsync(token, new TaskCompletionSource<object>(), message, asyncLogger);
         }
 
-        private Task SendAsync(CancellationToken token, TaskCompletionSource<object> tcs)
+        private Task SendAsync(CancellationToken token, TaskCompletionSource<object> tcs, AsyncLogEventInfo message, AsyncLogger asyncLogger)
         {
             if (token.IsCancellationRequested)
                 return tcs.CanceledTask();
@@ -69,10 +70,14 @@ namespace NLog.Targets.Syslog
                             tcs.SetException(t.Exception);
                             return;
                         }
-                        SendAsync(token, tcs);
+                        SendAsync(token, tcs, message, asyncLogger);
                     }, token, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Current);
 
                 return tcs.Task;
+            }
+            catch(LostConnectionException ex)
+            {
+                throw ex;
             }
             catch (Exception exception)
             {
